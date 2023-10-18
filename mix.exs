@@ -77,19 +77,54 @@ defmodule SipHash.Mixfile do
       { :ex_doc, "~> 0.18", optional: true, only: [ :docs ] }
     ]
   end
+
+  # https://github.com/whitfin/siphash-elixir/pull/5/files
+  # Basically the same code, just with my spin on it
+  def determine_host_make do
+    make_cmd =
+      case System.get_env("MAKE") do
+        nil ->
+          # nil is nil
+          nil
+
+        "" ->
+          # we don't want accidental empty variables
+          nil
+
+        cmd when is_binary(cmd) ->
+          cmd
+      end
+
+    case make_cmd do
+      nil ->
+        # if all else fails, let's check the OS
+        case :os.type() do
+          {:unix, bsd_like} when bsd_like in [:dragonfly, :freebsd, :netbsd, :openbsd] ->
+            "gmake"
+
+          _ ->
+            "make"
+        end
+
+      cmd ->
+        cmd
+    end
+  end
 end
 
 defmodule Mix.Tasks.Clean.Make do
   def run(_) do
-    { _result, 0 } = System.cmd("make", ["clean"], stderr_to_stdout: true)
+    make_cmd = SipHash.Mixfile.determine_host_make()
+    {_result, 0} = System.cmd(make_cmd, ["clean"], stderr_to_stdout: true)
     :ok
   end
 end
 
 defmodule Mix.Tasks.Compile.Make do
   def run(_) do
-    if !Application.get_env(:siphash, :disable_nifs)  do
-      { _result, 0 } = System.cmd("make", ["priv/siphash.so"], stderr_to_stdout: true)
+    make_cmd = SipHash.Mixfile.determine_host_make()
+    if !Application.get_env(:siphash, :disable_nifs, false)  do
+      {_result, 0} = System.cmd(make_cmd, ["priv/siphash.so"], stderr_to_stdout: true)
       Mix.Project.build_structure()
     end
     :ok
